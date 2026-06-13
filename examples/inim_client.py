@@ -692,7 +692,7 @@ COMMANDS = ("status", "version", "zones", "scenarios", "arm", "disarm")
 
 
 def _host_typo_hint(host: str) -> str | None:
-    """Catch '192.168.1.121disarm' — missing space before the subcommand."""
+    """Catch '192.168.1.50disarm' — missing space before the subcommand."""
     for cmd in COMMANDS:
         if host.endswith(cmd) and len(host) > len(cmd):
             prefix = host[: -len(cmd)]

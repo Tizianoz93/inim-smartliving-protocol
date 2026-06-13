@@ -69,7 +69,7 @@ On firmware 6.x, SmartLeague resolves addresses from embedded resources — not 
 | `1.0` | `*10` (legacy format) |
 | `2.0`–`6.0` | `*20` (extended format) |
 
-Test panel: `6.09 00515` → family **6.x**, extended format.
+Example firmware string `6.09 00515` → family **6.x**, extended format.
 
 ## Field-tested notes (515 / firmware 6.09)
 

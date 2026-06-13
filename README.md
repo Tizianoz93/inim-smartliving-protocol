@@ -211,7 +211,7 @@ Each digit → one byte; missing positions → `0xFF` (`PadRight(6)` in DLL).
 
 | PIN      | Bytes               |
 | -------- | ------------------- |
-| `0411`   | `00 04 01 01 FF FF` |
+| `1234`   | `01 02 03 04 FF FF` |
 | `123456` | `01 02 03 04 05 06` |
 
 
@@ -228,18 +228,18 @@ Same nibble layout as status. Set the target area's nibble to the desired mode; 
 | `4`  | `CMD_COMANDO_AREA_DISINSERIEMNTO`        | Disarm  |
 
 
-Full frame examples (PIN `0411`, area 1):
+Full frame examples (PIN `1234`, area 1):
 
 
 | Operation | Payload (22 bytes hex)                         |
 | --------- | ---------------------------------------------- |
-| Away      | `0100002006000e3500040101ffff0100000000000000` |
-| Stay      | `0100002006000e3500040101ffff0200000000000000` |
-| Instant   | `0100002006000e3500040101ffff0300000000000000` |
-| Disarm    | `0100002006000e3500040101ffff0400000000000000` |
+| Away      | `0100002006000e3501020304ffff0100000000000000` |
+| Stay      | `0100002006000e3501020304ffff0200000000000000` |
+| Instant   | `0100002006000e3501020304ffff0300000000000000` |
+| Disarm    | `0100002006000e3501020304ffff0400000000000000` |
 
 
-Area 5, Away: `0100002006000e3500040101ffff0000010000000000` (low nibble `1` at byte 2 of area block).
+Area 5, Away (515 layout): low nibble `1` at offset 2 of the 8-byte area block — e.g. `…ffff0000010000000000`.
 
 Multi-area commands use the same frame with multiple non-zero nibbles (used by scenarios).
 
@@ -319,17 +319,16 @@ Each scenario (max **30**) is a record of `MAX_NUM_DATI_MODI_INS` bytes at EEPRO
 
 A scenario is **active** when **every area included in its definition** (modes 1–4) currently matches the live area status at `0x2000`.
 
-Example on test panel (areas 1–2 = INTERNO + BALCONE):
+Illustrative two-area layout (labels come from the scenario name block in EEPROM, not from the protocol):
 
 
-| Scenario name | Target modes               | Meaning                                  |
-| ------------- | -------------------------- | ---------------------------------------- |
-| ON            | area1=Away, area2=Away     | Both fully armed Away                    |
-| PARZIALE      | area1=Stay, area2=Away     | Mixed arm modes (names are user-defined) |
-| OFF           | area1=Disarm, area2=Disarm | Both disarmed                            |
+| Slot | Example label source | Target `modo[]` pattern |
+| ---- | -------------------- | ----------------------- |
+| 0    | user-defined string  | all configured areas → Away |
+| 1    | user-defined string  | mixed modes (e.g. Stay on area 1, Away on area 2) |
+| 2    | user-defined string  | all configured areas → Disarm |
 
-
-> **Note:** ON / PARZIALE / OFF are **user-assigned scenario names**, not tri-state scenario statuses.
+There is no fixed ON/OFF/partial enum at the wire level — only per-area mode targets and installer-chosen names.
 
 Activating a scenario = sending the scenario's `modo[]` nibbles as an area command to `0x2006`.
 
