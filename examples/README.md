@@ -26,7 +26,7 @@ export INIM_PIN=1234
 
 python inim_client.py status
 python inim_client.py version
-python inim_client.py --areas 5 zones --zones 20
+python inim_client.py --areas 5 zones --zones 15
 python inim_client.py scenarios --stride 5 --addr 0x142BF
 python inim_client.py arm --mode away --area 1 --code $INIM_PIN --yes
 python inim_client.py disarm --area 1 --code $INIM_PIN --yes
@@ -46,3 +46,21 @@ python alarm_proxy.py --target panel.local --listen-port 5004 --log-dir capture_
 Point SmartLeague at the proxy machine (same port as `--listen-port`, default 5004).
 
 Press **Space** during capture to insert START/END log markers around manual operations.
+
+## Typical session structure
+
+A complete client session follows this pattern:
+
+1. **Handshake** — `pass`, wait ~400 ms, read firmware `@0x4000`.
+2. **Configuration** (once at connect) — bitmap `@0x14595`, programming `@0x14368`, names `@0x172F0` / `@0x17FA0` (515 / 6.x).
+3. **Poll loop** — reads at `@0x2000`–`@0x2003`.
+
+See [docs/MEMORY_MAP.md](../docs/MEMORY_MAP.md) for address details.
+
+## Poll benchmark
+
+`benchmark_poll.py` compares poll strategies on the realtime RAM (@0x2000–0x2003).
+On a 515, **four separate frame reads** (~240 ms) are required: `@0x2001`–`@0x2003` are
+independent registers, not offsets within a long read from `@0x2000`. See `verify_block_read.py`.
+
+See [docs/COMPATIBILITY.md](../docs/COMPATIBILITY.md) and [README.md](../README.md).

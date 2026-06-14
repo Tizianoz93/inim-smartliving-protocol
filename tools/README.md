@@ -1,14 +1,16 @@
-# Optional reverse-engineering helpers
+# Tools
 
-Scripts for IL disassembly of SmartLeague `Centrale5.dll` using [dnfile](https://github.com/distribution/dnfile) and [dncil](https://github.com/distribution/dncil).
+## `dump_memory.py`
+
+Reads a range of panel memory over TCP and saves it to a binary file (256 bytes per request, per protocol limit).
 
 ```bash
-pip install dnfile dncil
-python _re_decompile.py EseguiComando
-python _re_decompile.py AreeRealTime
-python _re_find.py 8192
+export INIM_HOST=192.168.1.50
+python dump_memory.py --start 0 --end 0x20000 --out panel.bin
 ```
 
-Edit the DLL path inside each script to match your SmartLeague installation.
+Also writes `panel.bin.strings.txt` — 16-byte printable slots with addresses (useful for locating name tables).
 
-These tools are **not** required to use the reference client or proxy.
+Address reference: [docs/MEMORY_MAP.md](../docs/MEMORY_MAP.md), [docs/COMPATIBILITY.md](../docs/COMPATIBILITY.md).
+
+Not required for the reference client in `examples/`.

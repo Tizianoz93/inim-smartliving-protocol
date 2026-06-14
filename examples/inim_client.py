@@ -2,8 +2,8 @@
 """
 Talk to an INIM SmartLiving panel on TCP port 5004 (SmartLAN/SI module).
 
-Figured out by sniffing SmartLeague traffic and reading Centrale5.dll.
-Close SmartLeague first — the panel only accepts one TCP session.
+See inim-protocol/README.md for the wire format and docs/MEMORY_MAP.md for decoding.
+Close other clients first — the panel only accepts one TCP session.
 
   export INIM_HOST=192.168.1.50
   export INIM_PIN=1234
@@ -30,14 +30,14 @@ CONNECT_TIMEOUT = 10.0
 IO_TIMEOUT = 8.0
 MAX_READ_CHUNK = 256  # length field in the read header is one byte
 
-# RAM map from Centrale5.dll / InizializzaRam_5_00 (same on every model we checked)
+# Realtime RAM map (same addresses on every model checked)
 ADDR_VERSION = 0x004000
-ADDR_STATUS = 0x002000       # com_read_stato_area
+ADDR_STATUS = 0x002000       # area status (nibble-packed)
 ADDR_STATUS_ZONE_TR = 0x002001
 ADDR_STATUS_ZONE1 = 0x002002
 ADDR_STATUS_ZONE2 = 0x002003
 ADDR_ESITO = 0x002004        # command result poll
-ADDR_CMD_AREA = 0x002006     # EseguiComando writes here
+ADDR_CMD_AREA = 0x002006     # arm/disarm write target
 ADDR_CMD_USCITE = 0x002007
 ADDR_CMD_RESET_AREA = 0x002008
 ADDR_CMD_ZONE = 0x002009
@@ -55,7 +55,7 @@ DIRECT_SCENARIO_NAMES = (0x17CF0,)
 PREFIX_READ = 0x0000
 PREFIX_WRITE = 0x0001
 
-# mode nibble values — match EseguiComando argument and status readback
+# mode nibble values — match status readback at 0x2000
 MODE_TOTAL = 1
 MODE_PARTIAL = 2
 MODE_INSTANT = 3
@@ -93,13 +93,25 @@ TERMINAL_STATE = {
     3: "line fault",
 }
 
+FIRMWARE_DATA_LEN = 12
+
+
+def strip_read_checksum(raw: bytes) -> bytes:
+    if len(raw) >= 2 and (sum(raw[:-1]) & 0xFF) == raw[-1]:
+        return raw[:-1]
+    return raw
+
+
+def decode_firmware_version(raw: bytes) -> str:
+    return strip_read_checksum(raw).decode("ascii", errors="replace").strip()
+
 
 def area_state_label(value: int) -> str:
     return MODE_LABELS.get(value, f"unknown (0x{value:X})")
 
 
 def area_nibble(data: bytes, area: int) -> int | None:
-    """Two areas per byte at 0x2000 — see AreeRealTime in Centrale5.dll."""
+    """Two areas per byte at 0x2000 — nibble-packed area status."""
     p = area - 1
     idx = p // 2
     if idx >= len(data):
@@ -129,8 +141,20 @@ class PanelStatus:
 
 
 def decode_name(raw: bytes) -> str:
-    """One 16-byte name slot. Panels pad with spaces; junk slots fail the ASCII check."""
-    cleaned = bytes(b for b in raw if b not in (0x00, 0xFF))
+    """One 16-byte name slot. Panels pad with spaces; byte 15 may be a type flag."""
+    if len(raw) < NAME_LEN:
+        raw = raw.ljust(NAME_LEN, b"\x00")
+    else:
+        raw = raw[:NAME_LEN]
+
+    if raw[15] in (0x20, 0x00, 0xFF):
+        text = raw
+    elif raw[14] in (0x20, 0x00, 0xFF):
+        text = raw[:15]
+    else:
+        text = raw
+
+    cleaned = bytes(b for b in text if b not in (0x00, 0xFF))
     if not cleaned or not all(0x20 <= b <= 0x7E for b in cleaned):
         return ""
     return " ".join(cleaned.decode("ascii").split())
@@ -182,7 +206,7 @@ def build_write_frame(address: int, payload: bytes) -> bytes:
 
 
 def encode_pin(pin: str) -> bytes:
-    """PadRight(6) from EseguiComando — missing digits become 0xFF."""
+    """6-byte PIN field — missing digit positions become 0xFF."""
     digits = pin.strip()
     if not digits.isdigit() or not (4 <= len(digits) <= PIN_LEN):
         raise ValueError(f"invalid PIN {pin!r} (want 4–{PIN_LEN} digits)")
@@ -448,15 +472,18 @@ class InimClient:
         return data
 
     def read_memory(self, address: int, length: int, prefix: int = PREFIX_READ) -> bytes:
+        """Read `length` payload bytes; each panel frame adds a trailing checksum."""
         out = bytearray()
         addr = address
-        left = length
-        while left > 0:
-            chunk = min(MAX_READ_CHUNK, left)
-            self._send(build_read_frame(addr, chunk, prefix))
-            out += self._recv_exact(chunk)
-            addr += chunk
-            left -= chunk
+        remaining = length
+        while remaining > 0:
+            wire = min(MAX_READ_CHUNK, remaining + 1)
+            self._send(build_read_frame(addr, wire, prefix))
+            raw = self._recv_exact(wire)
+            data = strip_read_checksum(raw)
+            out += data
+            addr += len(data)
+            remaining -= len(data)
         return bytes(out)
 
     def read_names_at(self, base: int, count: int) -> list[str]:
@@ -542,7 +569,7 @@ class InimClient:
         return self._scenario_names_raw[:count]
 
     def get_version(self) -> str:
-        return self.read_memory(ADDR_VERSION, 13).decode("ascii", errors="replace").strip()
+        return decode_firmware_version(self.read_memory(ADDR_VERSION, FIRMWARE_DATA_LEN))
 
     def get_status(self, length: int | None = None) -> PanelStatus:
         if length is None:

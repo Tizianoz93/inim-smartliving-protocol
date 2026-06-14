@@ -1,5 +1,1 @@
 # Reference client and TCP proxy — stdlib only, no runtime deps.
-
-# Optional: static analysis of SmartLeague Centrale5.dll (tools/)
-dnfile>=0.14.0
-dncil>=1.0.0
