@@ -95,7 +95,7 @@ After each write:
 
 1. Panel sends a 1-byte ACK.
 2. Client reads `@0x2004`, length 2.
-3. Panel returns result (e.g. `01 01` = OK).
+3. Panel returns the command result. `01 01` is a known success value. On a tested SmartLiving 515 / firmware 6.08, successful area commands instead returned ACK `00` and result `00 00`; verify the requested state with a subsequent status poll.
 
 ---
 
@@ -107,7 +107,7 @@ Fixed addresses on all models:
 |---------|-----|---------|
 | `0x2000` | read | Area status |
 | `0x2001` | read | Zone terminal state |
-| `0x2002` | read | Zone bypass / test |
+| `0x2002` | read | Zone bypass / active bitmap (see model note below) |
 | `0x2003` | read | Zone alarm memory + output status |
 | `0x2004` | read | Command result |
 | `0x2006` | write | Arm / disarm |
@@ -143,6 +143,8 @@ def area_mode(data: bytes, area: int) -> int:
 
 Read length for `N` areas: `N // 2 + 1 + 10` bytes (515 with 5 areas → 14 bytes).
 
+**SmartLiving 515 / firmware 6.08 observation:** in one tested installation, `@0x2000` byte 3 bit 0 followed the active alarm phase, while byte 7 bit 0 behaved as a global latched alarm-memory flag: it remained set after disarming and cleared when alarm memory was cleared at the panel. These offsets are empirical and should not yet be assumed universal.
+
 ### Arm / disarm (`@0x2006`)
 
 22 bytes total: 8-byte write header + 6-byte PIN + 8-byte area block.
@@ -173,8 +175,14 @@ Multi-area writes set multiple nibbles (scenarios use this).
 | Address | Encoding | Content |
 |---------|----------|---------|
 | `0x2001` | 2 bits/slot | 0=rest, 1=alarm, 2=short, 3=fault |
-| `0x2002` | 1 bit/slot | Bypass |
+| `0x2002` | 1 bit/slot | Bypass / active bitmap |
 | `0x2003` | 1 bit/slot | Alarm memory (zones); outputs follow |
+
+The `@0x2001` value mapping appears to vary from the mapping above on at least one SmartLiving 515 / firmware 6.x installation: repeated live tests showed raw `1` = normal/rest and raw `2` = violated/open. Raw `0` and `3` were not identified. Treat the symbolic meanings as empirical/model-dependent until confirmed on more panels.
+
+On the same panel, the `@0x2002` bit polarity was observed as `1` = active/included and `0` = bypassed, i.e. the inverse of a direct "bypass bit" interpretation.
+
+`@0x2003` was verified as latched per-zone alarm memory: a zone bit remains set after the active alarm has ended/disarmed and clears with the panel's alarm-memory reset.
 
 Poll **slot** indices, not logical terminal indices directly. Double zones use two slots: `t×2+1` and `t×2+2` for logical terminal `t`. See [MEMORY_MAP.md](docs/MEMORY_MAP.md).
 

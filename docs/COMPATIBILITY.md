@@ -86,6 +86,16 @@ Example: `6.09 00515` → family 6.x, 515 model code in suffix.
 
 Live reads for terminal programming may use `@0x12F07` (chunked); offline dumps align at `@0x14368`.
 
+### Additional 515 / firmware 6.08 field observations
+
+A second SmartLiving 515 installation showed a few realtime details that differ from, or refine, the generic decoding above:
+
+- `@0x2001`: raw `1` = normal/rest and raw `2` = violated/open in repeated live tests. Raw `0` and `3` remain unidentified there. This differs from the currently documented generic `0=rest, 1=alarm, 2=short, 3=fault` mapping and may indicate firmware/configuration-dependent semantics.
+- `@0x2002`: bit `1` behaved as zone active/included; bit `0` as bypassed. A consumer exposing a `bypass` boolean therefore needs to invert the bit on this panel.
+- `@0x2003`: per-zone bits behaved as latched alarm memory and remained set after disarming until alarm memory was cleared.
+- `@0x2000`: byte 3 bit 0 followed the active alarm phase; byte 7 bit 0 behaved as global latched alarm memory. These offsets are empirical and not yet assumed portable.
+- Area command completion: successful `@0x2006` writes returned ACK `00` with `@0x2004 = 00 00`, rather than `01 01`. Integrations should accept known success variants and confirm the resulting area state by polling.
+
 ---
 
 ## Example: 515 / 6.09 entity table

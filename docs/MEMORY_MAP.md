@@ -19,7 +19,7 @@ Realtime addresses are **fixed across all SmartLiving models**. Buffer **lengths
 |---------|-----|---------|
 | `0x2000` | read | Area status (nibble-packed) + alarm bitmaps |
 | `0x2001` | read | Zone terminal state (2 bits per poll slot) |
-| `0x2002` | read | Zone bypass / test (1 bit per poll slot) |
+| `0x2002` | read | Zone bypass / active bitmap (1 bit per poll slot) |
 | `0x2003` | read | Zone alarm/tamper memory + **output status bitmap** |
 | `0x2004` | read | Last command result |
 | `0x2006` | write | Arm/disarm (PIN + nibble-packed area block) |
@@ -57,6 +57,15 @@ nibble = (data[byte_idx] & 0x0F) if p % 2 == 0 else (data[byte_idx] >> 4) & 0x0F
 
 Command writes to `@0x2006` use the **same nibble encoding** in an 8-byte area block.
 
+### Alarm flags observed on 515 / firmware 6.08
+
+On one tested SmartLiving 515 / firmware 6.08 installation:
+
+- `@0x2000` byte 3 bit 0 followed the **currently active alarm phase**.
+- `@0x2000` byte 7 bit 0 behaved as a **global latched alarm-memory** flag. It remained set after disarming and cleared when alarm memory was cleared at the panel.
+
+These byte/bit offsets are empirical observations and have not yet been verified across other models or firmware versions.
+
 ---
 
 ## Zone status (`@0x2001`–`@0x2003`)
@@ -64,7 +73,7 @@ Command writes to `@0x2006` use the **same nibble encoding** in an 8-byte area b
 | Address | Bits | Meaning |
 |---------|------|---------|
 | `0x2001` | 2 per slot | Terminal state: 0=rest, 1=alarm, 2=short, 3=fault |
-| `0x2002` | 1 per slot | Bypass / test |
+| `0x2002` | 1 per slot | Bypass / active bitmap |
 | `0x2003` | 1 per slot | Alarm/tamper memory (zones); output bits follow (see below) |
 
 ```python
@@ -76,6 +85,10 @@ def zone_bypass(zone1: bytes, slot: int) -> bool:
     z = slot - 1
     return bool((zone1[z // 8] >> (z % 8)) & 0x01)
 ```
+
+> **515 / firmware 6.x field observation:** the symbolic state mapping above did not match one tested panel. Live tests consistently showed `@0x2001` raw `1` = normal/rest and raw `2` = violated/open; raw `0` and `3` were not identified. Also, the corresponding `@0x2002` bit was `1` for an active/included zone and `0` for a bypassed zone, so consumers may need to invert it when exposing a `bypass` boolean.
+>
+> On the same panel, the zone bits at `@0x2003` behaved as **latched alarm memory**: a triggered zone stayed set after disarming until alarm memory was cleared at the panel.
 
 **Poll slot count:** the buffer at `@0x2001` holds **M×2** slots (not M), where **M** = logical terminal count for the model. Double-balanced zones consume two consecutive slots per logical terminal:
 
